@@ -1,5 +1,4 @@
 # script for data cleaningfor the observer & quayside datasets - Northumberland IFCA
-# created: 6/10/2024 by Daisuke Goto (d.goto@bangor.ac.uk)
 
 # Check if required packages are installed
 required <- c("readr", "dplyr", "lubridate", "tidyr")

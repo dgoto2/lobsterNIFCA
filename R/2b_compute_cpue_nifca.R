@@ -1,9 +1,7 @@
 # script for data cleaning after the initial check for observer & quayside datasets - Northumberland IFCA 
-# created: 6/10/2024 by Daisuke Goto (d.goto@bangor.ac.uk)
 
 # check if required packages are installed
-required <- c("readr", "dplyr", "lubridate", "tidyr", "RColorBrewer", "rgdal", "sp", 
-              "rnaturalearth", "ggplot2", "ggridges")
+required <- c("readr", "dplyr", "lubridate", "tidyr", "RColorBrewer", "rgdal", "sp",  "rnaturalearth", "ggplot2", "ggridges")
 installed <- rownames(installed.packages())
 (not_installed <- required[!required %in% installed])
 install.packages(not_installed, dependencies=TRUE)
@@ -41,12 +39,6 @@ observer_data_offshore <- readr::read_csv("processed_data/nifca/observer_data_of
                 Distance_to_shore = distance_to_shore) |>
   dplyr::glimpse()
 
-# (exploratory) use number of pots on fleet for number of pots samples if missing
-#observer_data_offshore <- observer_data_offshore |> 
-#  dplyr::mutate(num_pots_sampled = dplyr::case_when(is.na(num_pots_sampled) ~ num_pots_per_fleet,
-#                                             !is.na(num_pots_sampled) ~ num_pots_sampled))
-# ***number of pot data is available for the fleet observer dataset***
-
 # subset by species
 observer_data_fleet_lobster <- observer_data_fleet |> 
   dplyr::filter(species=="Lobster") |> 
@@ -72,7 +64,6 @@ observer_data_fleet_crab <- observer_data_fleet_crab |>
 observer_data_offshore_crab <- observer_data_offshore_crab |> 
   dplyr::mutate(sample_mass_kg = dplyr::case_when(sex == 0 ~ 0.0002*carapace_width^3.03/1000, 
                                                   sex == 1 ~ 0.0002*carapace_width^2.94/1000))
-
 
 # function to compute nominal catch, landings, cpue, and lpue per fishing trip 
 compute_cpue.lpue <- function(data) {
@@ -101,7 +92,7 @@ compute_cpue.lpue <- function(data) {
     purrr::reduce(dplyr::left_join) |>
     dplyr::mutate(nominal.cpue = nominal.catch/nominal.effort
                   , nominal.lpue = nominal.landing/nominal.effort) |>
-    tidyr::unite(trip, c(vesselID, date), sep = "|", remove = FALSE) |> # create factor per fishing trip
+    tidyr::unite(trip, c(vesselID, date), sep = "|", remove = FALSE) |> 
     dplyr::mutate(date = as.Date(date), 
                   month = lubridate::month(date), 
                   quarter = lubridate::quarter(date), 
@@ -113,10 +104,9 @@ compute_cpue.lpue <- function(data) {
       #nominal.lpue_returns_crab = mean(nominal.lpue_returns_crab, na.rm = TRUE),
                   num_pots_per_fleet = unique(num_pots_per_fleet),
                   port = unique(port), 
-                  species = unique(species)) # trip-level info
+                  species = unique(species)) 
   observer_data_trip <- observer_data_trip |> 
     dplyr::left_join(observer_data_select_trip, by = c("date", "vesselID", "fleet_num")) 
-  
   
   # per pot set (w/ unique gps coordinates)
   # compute total number of pots set in each location in each trip
@@ -172,7 +162,7 @@ compute_cpue.lpue <- function(data) {
                   depth_interpol_dist = mean(Depth_interpolation_distance, na.rm = TRUE), 
                   folk_16 = unique(folk_16), 
                   folk_7 = unique(folk_7)
-                   ) # potset-level info
+                   )
   observer_data_potset <- observer_data_potset |> 
     dplyr::left_join(observer_data_select_potset, by = c("vesselID", "date", "lat", "lon")) 
   
@@ -181,9 +171,7 @@ compute_cpue.lpue <- function(data) {
 
 # apply the function to each stock
 observer_data_fleet_lobster_out <- compute_cpue.lpue(observer_data_fleet_lobster) # lobster
-observer_data_fleet_crab_out <- compute_cpue.lpue(observer_data_fleet_crab) # crab
 observer_data_offshore_lobster_out <- compute_cpue.lpue(observer_data_offshore_lobster) # lobster
-observer_data_offshore_crab_out <- compute_cpue.lpue(observer_data_offshore_crab) # crab
 
 # REPLACE landings and LPUE before OCTOER 2017 (IMPLEMENTAITON OF BANNING OF SUBLEGAL SIZED ANIMALS)
 # *** UNDERSIZED ANIMALS ARE RELEASED AFTER October 2017
@@ -208,9 +196,7 @@ replace_landing <- function(data) {
 }
 
 observer_data_fleet_lobster_out <- replace_landing(observer_data_fleet_lobster_out)
-observer_data_fleet_crab_out <- replace_landing(observer_data_fleet_crab_out)
 observer_data_offshore_lobster_out <- replace_landing(observer_data_offshore_lobster_out)
-observer_data_offshore_crab_out <- replace_landing(observer_data_offshore_crab_out)
 
 # # returns data per month, observer data per fishing trip
 # observer_data_fleet_lobster_out[[1]] <- observer_data_fleet_lobster_out[[1]] |> 
@@ -238,23 +224,16 @@ returns_data_compact <- returns_data |>
                  nominal.lpue_returns_crab = mean(nominal.lpue_returns_crab, na.rm = TRUE)
   )
 
-
 # export output as rds (as a list)
 readr::write_rds(observer_data_fleet_lobster_out, file = "processed_data/nifca/observer_data_fleet_lobster_nominal.cpue.rds") # lobster
-readr::write_rds(observer_data_fleet_crab_out, file = "processed_data/nifca/observer_data_fleet_crab_nominal.cpue.rds") # crab
 readr::write_rds(observer_data_offshore_lobster_out, file = "processed_data/nifca/observer_data_offshore_lobster_nominal.cpue.rds") # lobster
-readr::write_rds(observer_data_offshore_crab_out, file = "processed_data/nifca/observer_data_offshore_crab_nominal.cpue.rds") # crab
 
 # export output as csv
 readr::write_csv(observer_data_fleet_lobster_out[[1]], file = "processed_data/nifca/observer_data_fleet_lobster_nominal.cpue_trip.csv") 
-readr::write_csv(observer_data_fleet_crab_out[[1]], file = "processed_data/nifca/observer_data_fleet_crab_nominal.cpue_trip.csv")
 readr::write_csv(observer_data_fleet_lobster_out[[2]], file = "processed_data/nifca/observer_data_fleet_lobster_nominal.cpue_potset.csv") 
-readr::write_csv(observer_data_fleet_crab_out[[2]], file = "processed_data/nifca/observer_data_fleet_crab_nominal.cpue_potset.csv")
 
 readr::write_csv(observer_data_offshore_lobster_out[[1]], file = "processed_data/nifca/observer_data_offshore_lobster_nominal.cpue_trip.csv") 
-readr::write_csv(observer_data_offshore_crab_out[[1]], file = "processed_data/nifca/observer_data_offshore_crab_nominal.cpue_trip.csv")
 readr::write_csv(observer_data_offshore_lobster_out[[2]], file = "processed_data/nifca/observer_data_offshore_lobster_nominal.cpue_potset.csv") 
-readr::write_csv(observer_data_offshore_crab_out[[2]], file = "processed_data/nifca/observer_data_offshore_crab_nominal.cpue_potset.csv")
 
 readr::write_csv(returns_data_compact, file = "processed_data/nifca/returns_data_compact.csv")
 

@@ -1,5 +1,4 @@
 # script for data cleaning for the crab and lobster length composition dataset (from CEFAS port sampling) - Northumberland IFCA
-# created: 6/10/2024 by Daisuke Goto (d.goto@bangor.ac.uk)
 
 # Check if required packages are installed
 required <- c("readr", "dplyr", "lubridate", "tidyr", "janitor")
@@ -26,37 +25,13 @@ port.sampling_nifca <- port.sampling_nifca |>
 # subset species
 port.sampling_nifca.lobster <- port.sampling_nifca |> 
   dplyr::filter(species == "LBE")
-port.sampling_nifca.crab <- port.sampling_nifca |> 
-  dplyr::filter(species == "CRE")
-
-# # subset port sampling 
-# port.sampling_nifca.lobster_port <- port.sampling_nifca |> 
-#   dplyr::filter(species == "LBE" & data_source == "Port")
-# port.sampling_nifca.crab_port <- port.sampling_nifca |> 
-#   dplyr::filter(species == "CRE" & data_source == "Port")
-# 
-# # subset boat sampling
-# port.sampling_nifca.lobster_boat <- port.sampling_nifca |> 
-#   dplyr::filter(species == "LBE" & data_source == "Boat")
-# port.sampling_nifca.crab_boat <- port.sampling_nifca |> 
-#   dplyr::filter(species == "CRE" & data_source == "Boat")
 
 # export datasets
 readr::write_csv(port.sampling_nifca.lobster, file = "processed_data/nifca/lt.comp_lobster_nifca_clean.csv") 
-readr::write_csv(port.sampling_nifca.crab, file = "processed_data/nifca/lt.comp_crab_nifca_clean.csv")
-
-# readr::write_csv(port.sampling_nifca.lobster_port, file = "processed_data/nifca/lt.comp_lobster_nifca_port_clean.csv") 
-# readr::write_csv(port.sampling_nifca.crab_port, file = "processed_data/nifca/lt.comp_crab_nifca_port_clean.csv")
-# readr::write_csv(port.sampling_nifca.lobster_boat, file = "processed_data/nifca/lt.comp_lobster_nifca_boat_clean.csv") 
-# readr::write_csv(port.sampling_nifca.crab_boat, file = "processed_data/nifca/lt.comp_crab_nifca_boat_clean.csv")
-
 
 # reformat length composition input data (for SS)
-# set up population length bin structure (note - irrelevant if not using size data and using empirical wtatage
 #_N_LengthBins; then enter lower edge of each length bin
-
 #_yr month fleet sex part Nsamp datavector(female-male) ***separate males and females*** 
-# lobster
 data <- port.sampling_nifca.lobster
 data$length <- data$length/10 # recorded in mm -> convert to cm for ss
 size.min <- 1#round(min(data$length, na.rm = TRUE))
@@ -83,7 +58,6 @@ for (i in c(unique(data$month.yr))) {
     size.dist_m[7:(n.size+6)] <- table(cut(subdata_m$length, 
                                            breaks = c(size.min, seq(size.min+width, size.max-width, by = width), 
                                                       size.max)))
-    #print(size.dist_m[7:(n.size+6)])
   }
   if (nrow(subdata_f) > 0) {
     size.dist_f[1] <- unique(subdata_f$year)
@@ -110,74 +84,11 @@ size.dist_lobster_f <- size.dist_lobster |>
 size.dist_lobster <- size.dist_lobster_f |> dplyr::bind_cols(size.dist_lobster_m) 
 colnames(size.dist_lobster) <- c("year", "month", "fleet", "sex", "part", "nsample", paste0("f", 1:n.size), paste0("m", 1:n.size))
 
-# crab
-data <- port.sampling_nifca.crab
-data$length <- data$length/10 # recorded in mm -> convert to cm for ss
-size.min <- 1#round(min(data$length, na.rm = TRUE))
-(size.max <- round(max(data$length, na.rm = TRUE)))
-width <- 0.2
-n.size <- length(table(cut(data$length, 
-                           breaks = c(size.min,
-                                      seq(size.min+width, size.max+width*2-width, by = width), 
-                                      size.max+width*2))))
-size.dist_m <- matrix(NA, 1, n.size+6)
-size.dist_f <- matrix(NA, 1, n.size+6)
-size.dist_crab <- NULL 
-for (i in c(unique(data$month.yr))) {
-  print(i)
-  #print(data[data$month.yr==i,])
-  subdata <- data[data$month.yr==i,]
-  subdata_m <- subdata[subdata$sex==0,]
-  subdata_f <- subdata[subdata$sex==1,]
-  if (nrow(subdata_m) > 0) {
-    size.dist_m[1] <- unique(subdata_m$year)
-    size.dist_m[2] <- unique(subdata_m$month)
-    size.dist_m[3] <- 1 # fleet
-    size.dist_m[4] <- unique(subdata_m$sex)
-    size.dist_m[5] <- 0 #part    
-    size.dist_m[6] <- nrow(subdata_m)
-    size.dist_m[7:(n.size+6)] <- table(cut(subdata_m$length, 
-                                           breaks = c(size.min, seq(size.min+width, size.max+width*2-width, by = width), 
-                                                      size.max+width*2)))
-  }
-  if (nrow(subdata_f) > 0) {
-    size.dist_f[1] <- unique(subdata_f$year)
-    size.dist_f[2] <- unique(subdata_f$month)
-    size.dist_f[3] <- 1 # fleet
-    size.dist_f[4] <- unique(subdata_f$sex)
-    size.dist_f[5] <- 0 #part    
-    size.dist_f[6] <- nrow(subdata_f)
-    size.dist_f[7:(n.size+6)] <- table(cut(subdata_f$length, 
-                                           breaks = c(size.min, seq(size.min+width,size.max+width*2-width, by = width), 
-                                                      size.max+width*2)))
-  }
-  size.dist <- dplyr::bind_rows(as.data.frame(size.dist_m), as.data.frame(size.dist_f))
-  size.dist_crab <- dplyr::bind_rows(as.data.frame(size.dist_crab), as.data.frame(size.dist))
-}
-colnames(size.dist_crab) <- c("year", "month", "fleet", "sex", "part", "nsample", paste0("s", 1:n.size))
-size.dist_crab_m <- size.dist_crab |> 
-  dplyr::filter(sex == 0) |> 
-  dplyr::mutate(sex = 3) |>
-  dplyr::rename(nsample.m = nsample) |>
-  dplyr::select(-year, -month, -fleet, -sex, -part)
-size.dist_crab_f <- size.dist_crab |> 
-  dplyr::filter(sex == 1) |> 
-  dplyr::mutate(sex = 3) 
-size.dist_crab <- size.dist_crab_f |> 
-  dplyr::bind_cols(size.dist_crab_m) |> 
-  dplyr::mutate(nsample = nsample+nsample.m) |>
-  dplyr::select(-nsample.m)
-colnames(size.dist_crab) <- c("year", "month", "fleet", "sex", "part", "nsample", paste0("f", 1:n.size), paste0("m", 1:n.size))
-
 # export data
 readr::write_csv(size.dist_lobster, file = "processed_data/nifca/size.comp.data_lobster_nifca_ss.csv") 
-readr::write_csv(size.dist_crab, file = "processed_data/nifca/size.comp.data_crab_nifca_ss.csv") 
-
 
 # data exploration
-# lobster
 data1 <- port.sampling_nifca.lobster
-
 (plot <- data1 |> ggplot2::ggplot(ggplot2::aes(x = length, y = as.factor(year))) +
     ggridges::geom_density_ridges(scale = 2.5, 
                                   alpha = 0.3, 

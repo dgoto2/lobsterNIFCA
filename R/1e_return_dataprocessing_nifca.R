@@ -1,5 +1,4 @@
 # script for data cleaning for the return (reported catch) dataset. - Northumberland IFCA
-# created: 6/7/2024 by Daisuke Goto (d.goto@bangor.ac.uk)
 
 # Check if required packages are installed
 required <- c("readr", "dplyr", "lubridate", "tidyr", "janitor")
