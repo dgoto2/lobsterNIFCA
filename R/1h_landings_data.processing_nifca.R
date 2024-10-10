@@ -1,4 +1,4 @@
-# script for extracting monthly crab and lobster landings data from the MMO IFISH dataset - Northumberland IFCA
+# script for extracting monthly landings data from the MMO IFISH dataset - Northumberland IFCA
 
 # check if required packages are installed
 required <- c("readr", "dplyr", "lubridate", "tidyr", "RColorBrewer", "rgdal", "sp", "rnaturalearth", "ggplot2", "ggridges")

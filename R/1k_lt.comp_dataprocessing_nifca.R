@@ -1,4 +1,4 @@
-# script for data cleaning for the crab and lobster length composition dataset (from CEFAS port sampling) - Northumberland IFCA
+# script for data cleaning for length composition dataset (from CEFAS port sampling) - Northumberland IFCA
 
 # Check if required packages are installed
 required <- c("readr", "dplyr", "lubridate", "tidyr", "janitor")

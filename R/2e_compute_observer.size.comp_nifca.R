@@ -1,4 +1,4 @@
-# script to reformat size composition data as SS model input for the crab and lobster observer data - Northumberland IFCA 
+# script to reformat size composition data as SS model input for the observer data - Northumberland IFCA 
 
 # check if required packages are installed
 required <- c("readr", "dplyr", "lubridate", "tidyr", "RColorBrewer", "rgdal", "sp", "rnaturalearth", "ggplot2", "ggridges")
