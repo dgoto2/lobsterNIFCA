@@ -59,3 +59,32 @@ returns_data <- returns_data_total |>
 # export files
 readr::write_csv(returns_data_total, file = "processed_data/nifca/returns_data_total_nifca_clean.csv") 
 readr::write_csv(returns_data, file = "processed_data/nifca/returns_data_all_nifca_clean.csv") 
+
+
+# Catch data: yr, season, fleet, catch, catch_se
+data_lobster <- returns_data |>
+  dplyr::group_by(qrt.yr, vessel_id) |> 
+  dplyr::reframe(year = unique(year),
+                 quarter = unique(quarter),
+                 landing_vessel = unique(total_lobster, na.rm = TRUE)) |>
+  dplyr::group_by(year) |> 
+  dplyr::reframe(year = unique(year),
+                 quarter = max(quarter),
+                 fleet = 2,
+                 landing = sum(landing_vessel, na.rm = TRUE)/1000,
+                 catch.se = 0.05) 
+data_crab <- returns_data |>
+  dplyr::group_by(qrt.yr, vessel_id) |> 
+  dplyr::reframe(year = unique(year),
+                 quarter = unique(quarter),
+                 landing_vessel = unique(total_crab, na.rm = TRUE)) |>
+  dplyr::group_by(year) |> 
+  dplyr::reframe(year = unique(year),
+                 quarter = max(quarter),
+                 fleet = 2,
+                 landing = sum(landing_vessel, na.rm = TRUE)/1000,
+                 catch.se = 0.05) 
+
+# export datasets
+readr::write_csv(data_lobster, file = "processed_data/nifca/returns.catch.data_lobster_nifca_ss.csv") 
+readr::write_csv(data_crab, file = "processed_data/nifca/returns.catch.data_crab_nifca_ss.csv") 

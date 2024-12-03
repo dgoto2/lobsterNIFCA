@@ -1,24 +1,17 @@
-# script for extracting monthly landings data from the MMO IFISH dataset - Northumberland IFCA
+# script for extracting monthly crab and lobster landings data from the MMO IFISH dataset - Northumberland IFCA
 
 # check if required packages are installed
-required <- c("readr", "dplyr", "lubridate", "tidyr", "RColorBrewer", "rgdal", "sp", "rnaturalearth", "ggplot2", "ggridges")
+required <- c("readr", "dplyr", "lubridate", "tidyr", "RColorBrewer", "rgdal", "sp", 
+              "rnaturalearth", "ggplot2", "ggridges")
 installed <- rownames(installed.packages())
 (not_installed <- required[!required %in% installed])
 install.packages(not_installed, dependencies=TRUE)
 
 # read in data
-# vessel license history
-setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-setwd("..")
-license.history_data <- readr::read_csv(file = "data/FISP_license_history_anon.csv")
-dplyr::glimpse(license.history_data)
-
-# ifish landings: 2008-2022 (files in each folder have different data structures)
 files1 <- list.files(path="data/mmo_landings_published.data/2008_2012", pattern=".csv$")
 files2 <- list.files(path="data/mmo_landings_published.data/2013_2017", pattern=".csv$")
 files3 <- list.files(path="data/mmo_landings_published.data/2018_2022", pattern=".csv$")
 allmyData1 <- allmyData2 <- allmyData3 <- NULL
-
 for (i in c(files1)) {
   myData1 <- readr::read_csv(file = paste0("data/mmo_landings_published.data/2008_2012/", i))
   allmyData1 <- data.table::rbindlist(list(allmyData1, myData1)) 
@@ -52,7 +45,8 @@ allmyData3 <- allmyData3 |>
                 -port_of_landing, -port_nationality, -species_code, -landing_type, -tac_code)
 allmyData3 <- allmyData3 |> 
   dplyr::select(year, month,  vessel_nationality, fao_division, ices_division, rectangle,   
-                length_group, gear_category, species_name, species_group, live_weight_tonnes, landed_weight_tonnes, value_pounds)
+                length_group, gear_category, species_name, species_group, live_weight_tonnes, landed_weight_tonnes, 
+                value_pounds)
 colnames(allmyData3)[4] <- "fao_area"
 colnames(allmyData3)[9] <- "species"
 
@@ -84,44 +78,64 @@ ifish_landings_nifca <- ifish_landings_nifca |>
                 lat = mapplots::ices.rect(rectangle)$lat) |> 
   dplyr::glimpse()
 
+# export data
+readr::write_csv(ifish_landings_nifca, file = "processed_data/nifca/ifish_landings_nifca.csv") 
+
 # subset landings by species
 ifish_landings_nifca_lobster <- ifish_landings_nifca |> 
   dplyr::filter(species %in% c("Lobsters" )) |> 
+  dplyr::filter((gear_category == "Pots and traps"))
+ifish_landings_nifca_crab <- ifish_landings_nifca |> 
+  dplyr::filter(species %in% c("Crabs", "Crabs (C.P.Mixed Sexes)")) |> 
   dplyr::filter((gear_category == "Pots and traps"))
 
 # bycatch (crabs and lobsters not caught by pots and traps)
 ifish_landings_nifca_lobster_bycatch <- ifish_landings_nifca |> 
   dplyr::filter(species %in% c("Lobsters" )) |> 
   dplyr::filter(!(gear_category == "Pots and traps"))
+ifish_landings_nifca_crab_bycatch <- ifish_landings_nifca |> 
+  dplyr::filter(species %in% c("Crabs", "Crabs (C.P.Mixed Sexes)")) |>  
+  dplyr::filter(!(gear_category == "Pots and traps"))
 
 # export output as csv
 readr::write_csv(ifish_landings_nifca_lobster, file = "processed_data/nifca/ifish_landings_nifca_lobster_clean.csv") 
+readr::write_csv(ifish_landings_nifca_crab, file = "processed_data/nifca/ifish_landings_nifca_crab_clean.csv")
 readr::write_csv(ifish_landings_nifca_lobster_bycatch, file = "processed_data/wales/ifish_landings_nifca_lobster_bycatch_clean.csv") 
+readr::write_csv(ifish_landings_nifca_crab_bycatch, file = "processed_data/wales/ifish_landings_nifca_crab_bycatch_clean.csv")
 
 # aggregate by year
 ifish_landings_nifca_lobster_annual <- ifish_landings_nifca_lobster |> 
-  dplyr::group_by(species, year, lon, lat) |> 
+  dplyr::group_by(species, year, lon, lat, rectangle) |> 
+  dplyr::summarise(landings = sum(live_weight_tonnes), 
+                   econ.value = sum(value_pounds)/1000000)
+ifish_landings_nifca_crab_annual <- ifish_landings_nifca_crab |> 
+  dplyr::group_by(species, year, lon, lat, rectangle) |> 
   dplyr::summarise(landings = sum(live_weight_tonnes), 
                    econ.value = sum(value_pounds)/1000000)
 ifish_landings_nifca_lobster_bycatch_annual <- ifish_landings_nifca_lobster_bycatch |> 
-  dplyr::group_by(species, year, lon, lat) |> 
+  dplyr::group_by(species, year, lon, lat, rectangle) |> 
+  dplyr::summarise(landings = sum(live_weight_tonnes), 
+                   econ.value = sum(value_pounds)/1000000)
+ifish_landings_nifca_crab_bycatch_annual <- ifish_landings_nifca_crab_bycatch |> 
+  dplyr::group_by(species, year, lon, lat, rectangle) |> 
   dplyr::summarise(landings = sum(live_weight_tonnes), 
                    econ.value = sum(value_pounds)/1000000)
 
 # export output as csv
 readr::write_csv(ifish_landings_nifca_lobster_annual, file = "processed_data/nifca/ifish_landings_nifca_lobster_annual_clean.csv") 
+readr::write_csv(ifish_landings_nifca_crab_annual, file = "processed_data/nifca/ifish_landings_nifca_crab_annual_clean.csv")
 readr::write_csv(ifish_landings_nifca_lobster_bycatch_annual, file = "processed_data/nifca/ifish_landings_nifca_lobster_bycatch_annual_clean.csv") 
+readr::write_csv(ifish_landings_nifca_crab_bycatch_annual, file = "processed_data/nifca/ifish_landings_nifca_crab_bycatch_annual_clean.csv")
 
 # exploratory plotting
 # temporal trends
 data <- ifish_landings_nifca_lobster
-response <- data$landed_weight_tonnes
+response <- data$landed_weight_tonnes 
 response.name <- "nominal landings (t)"
-
 mycolors = c(RColorBrewer::brewer.pal(name = "Paired", n = 12), 
              RColorBrewer::brewer.pal(name = "Set3", n = 7) )
 (plot1 <- data |>
-    ggplot2::ggplot(ggplot2::aes(fill = length_group, y = response, x=mon_year)) + 
+    ggplot2::ggplot(ggplot2::aes(fill = length_group, y = landed_weight_tonnes , x = year)) + 
     ggsci::scale_fill_jco() +
     ggplot2::geom_bar(position="stack", stat="identity") +
     ggplot2::xlab("year") +
@@ -145,9 +159,6 @@ mycolors = c(RColorBrewer::brewer.pal(name = "Paired", n = 12),
       strip.placement = "outside",
       strip.text.x = ggplot2::element_text(size = 10, colour = "darkblue")) +  
     ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(size = 3))))
-
-# export plot
-ggplot2::ggsave(file=paste0("plots/nifca/", response.name, "_ifish_trends_nifca.svg"), plot=plot1, width=12, height=8)
 
 # spatial variation
 data <- ifish_landings_nifca_lobster_annual
@@ -190,22 +201,27 @@ world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
       strip.background = ggplot2::element_blank(), 
       strip.placement = "outside",
       strip.text.x = ggplot2::element_text(size = 10, colour = "darkblue")) +  
-    ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(size = 3))) +
-    ggplot2::guides(fill=ggplot2::guide_legend(title="Month")) +
+    ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(size = 6))) +
+    ggplot2::guides(fill = ggplot2::guide_legend(title="Month")) +
     ggplot2::facet_wrap(~ year, #scales = "free", 
                         strip.position = "top", ncol = 5))
 
-# export plot
-ggplot2::ggsave(file=paste0("plots/nifca/", response.name, "_ifish_ices.rec_nifca_", unique(data$species), ".svg"), plot=plot2, width=12, height=8)
 
 # reformat datasets for ss
-# load landings data from published ifish datasets
 ifish_landings_nifca_lobster <- ifish_landings_nifca_lobster |>
   dplyr::mutate(length_group = dplyr::case_when(length_group == "10m&Under" ~ "10m&Under", 
                                                 length_group == "Over10m" ~ "Over10m", 
                                                 length_group %in% c("10.01 - 12.00m",  "12.01 - 15.00m", "15.01 - 18.00m") ~ "Over10m",
                                                 length_group %in% c("8.00m and under", "8.01 - 10.00m") ~ "10m&Under"))
+ifish_landings_nifca_crab <- ifish_landings_nifca_crab |>
+  dplyr::mutate(length_group = dplyr::case_when(length_group == "10m&Under" ~ "10m&Under", 
+                                                length_group == "Over10m" ~ "Over10m", 
+                                                length_group %in% c("10.01 - 12.00m",  "12.01 - 15.00m", "15.01 - 18.00m") ~ "Over10m",
+                                                length_group %in% c("8.00m and under", "8.01 - 10.00m") ~ "10m&Under"))
 ifish_landings_nifca_lobster <- ifish_landings_nifca_lobster |> 
+  dplyr::group_by(year, qtr, length_group) |>
+  dplyr::reframe(landing = sum(live_weight_tonnes))
+ifish_landings_nifca_crab <- ifish_landings_nifca_crab |> 
   dplyr::group_by(year, qtr, length_group) |>
   dplyr::reframe(landing = sum(live_weight_tonnes))
 
@@ -215,22 +231,65 @@ ifish_bycatch_nifca_lobster <- ifish_landings_nifca_lobster_bycatch |>
                                                 length_group == "Over10m" ~ "Over10m", 
                                                 length_group %in% c("10.01 - 12.00m",  "12.01 - 15.00m", "15.01 - 18.00m", "24.01 - 40.00m", "18.01 - 24.00m", "Over 40.00m" ) ~ "Over10m",
                                                 length_group %in% c("8.00m and under", "8.01 - 10.00m") ~ "10m&Under"))
+ifish_bycatch_nifca_crab <- ifish_landings_nifca_crab_bycatch |>
+  dplyr::mutate(length_group = dplyr::case_when(length_group == "10m&Under" ~ "10m&Under", 
+                                                length_group == "Over10m" ~ "Over10m", 
+                                                length_group %in% c("10.01 - 12.00m",  "12.01 - 15.00m", "15.01 - 18.00m", "24.01 - 40.00m", "18.01 - 24.00m", "Over 40.00m" ) ~ "Over10m",
+                                                length_group %in% c("8.00m and under", "8.01 - 10.00m") ~ "10m&Under"))
 ifish_bycatch_nifca_lobster <- ifish_bycatch_nifca_lobster |> 
   dplyr::group_by(year, qtr, length_group) |>
   dplyr::reframe(landing = sum(live_weight_tonnes))
+ifish_bycatch_nifca_crab <- ifish_bycatch_nifca_crab |> 
+  dplyr::group_by(year, qtr, length_group) |>
+  dplyr::reframe(landing = sum(live_weight_tonnes))
+
 
 # Catch data: yr, season, fleet, catch, catch_se
 data_lobster <- ifish_landings_nifca_lobster |>
-  dplyr::mutate(length_group = dplyr::case_when(length_group == "10m&Under" ~ 1, 
-                                                length_group == "Over10m" ~ 2),
-                catch.se = 0.05)
+  dplyr::group_by(year) |> 
+  dplyr::reframe(year = unique(year),
+                 quarter = max(qtr),
+                 fleet = 2,
+                 landing = sum(landing),
+                 catch.se = 0.05) |>
+  dplyr::ungroup() |>
+  dplyr::mutate(catch.se = sd(landing)/mean(landing)) |>
+  dplyr::glimpse()
+data_crab <- ifish_landings_nifca_crab |>
+  dplyr::group_by(year) |> 
+  dplyr::reframe(year = unique(year),
+                 quarter = max(qtr),
+                 fleet = 2,
+                 landing = sum(landing),
+                 catch.se = 0.05) |>
+  dplyr::ungroup() |>
+  dplyr::mutate(catch.se = sd(landing)/mean(landing)) |>
+  dplyr::glimpse()  
 
 # bycatch
 data_lobster_bycatch <- ifish_bycatch_nifca_lobster |> 
-  dplyr::mutate(length_group = dplyr::case_when(length_group == "10m&Under" ~ 1, 
-                                                length_group == "Over10m" ~ 2),
-                catch.se = 0.05)
+  dplyr::group_by(year) |> 
+  dplyr::reframe(year = unique(year),
+                 quarter = max(qtr),
+                 fleet = 2,
+                 landing = sum(landing),
+                 catch.se = 0.05) |>
+  dplyr::ungroup() |>
+  dplyr::mutate(catch.se = sd(landing)/mean(landing)) |>
+  dplyr::glimpse()
+data_crab_bycatch <- ifish_bycatch_nifca_crab |> 
+  dplyr::group_by(year) |> 
+  dplyr::reframe(year = unique(year),
+                 quarter = max(qtr),
+                 fleet = 2,
+                 landing = sum(landing),
+                 catch.se = 0.05) |>  
+  dplyr::ungroup() |>
+  dplyr::mutate(catch.se = sd(landing)/mean(landing)) |>
+  dplyr::glimpse()
 
 # export datasets
 readr::write_csv(data_lobster, file = "processed_data/nifca/landing.data_lobster_nifca_ss.csv") 
+readr::write_csv(data_crab, file = "processed_data/nifca/landing.data_crab_nifca_ss.csv") 
 readr::write_csv(data_lobster_bycatch, file = "processed_data/nifca/bycatch.data_lobster_nifca_ss.csv") 
+readr::write_csv(data_crab_bycatch, file = "processed_data/nifca/bycatch.data_crab_nifca_ss.csv") 

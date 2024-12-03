@@ -1,7 +1,8 @@
 # script for data cleaning after the initial check for observer & quayside datasets - Northumberland IFCA 
 
 # check if required packages are installed
-required <- c("readr", "dplyr", "lubridate", "tidyr", "RColorBrewer", "rgdal", "sp",  "rnaturalearth", "ggplot2", "ggridges")
+required <- c("readr", "dplyr", "lubridate", "tidyr", "RColorBrewer", "rgdal", "sp", 
+              "rnaturalearth", "ggplot2", "ggridges")
 installed <- rownames(installed.packages())
 (not_installed <- required[!required %in% installed])
 install.packages(not_installed, dependencies=TRUE)
@@ -28,9 +29,13 @@ returns_data <- readr::read_csv(file = "processed_data/nifca/returns_data_all_ni
 observer_data_fleet <- readr::read_csv("processed_data/nifca/observer_data_fleet_nifca_clean_env.csv") |>
   dplyr::mutate(date = as.Date(date, format = "%d/%m/%Y")) |>
   dplyr::glimpse() 
-
+observer_data_offshore |>
+  dplyr::group_by(year, vesselID) |>
+  dplyr::reframe(ave.pot = mean(num_pots_sampled, na.rm = TRUE),
+                 n = dplyr::n()) |>
+  print(n = 200)
 observer_data_offshore <- readr::read_csv("processed_data/nifca/observer_data_offshore_nifca_clean_env.csv") |> 
-  dplyr::mutate(date = as.Date(date, format = "%d/%m/%Y")) |> # format as date 
+  dplyr::mutate(date = as.Date(date, format = "%d/%m/%Y")) |>
   dplyr::mutate(temperature = Temperature,
                 temperature_interpolation_dist = Temp_dist,
                 Distance_to_shore = distance_to_shore,
@@ -53,7 +58,7 @@ observer_data_offshore_crab <- observer_data_offshore |>
   dplyr::filter(species=="Crab") |> 
   dplyr::glimpse()
 
-# compute mass (the same equations used for the welsh stocks)
+# compute mass
 observer_data_fleet_lobster <- observer_data_fleet_lobster |> 
   dplyr::mutate(sample_mass_kg = 4.36E-07*carapace_width^3.10753)
 observer_data_offshore_lobster <- observer_data_offshore_lobster |> 
@@ -65,28 +70,25 @@ observer_data_offshore_crab <- observer_data_offshore_crab |>
   dplyr::mutate(sample_mass_kg = dplyr::case_when(sex == 0 ~ 0.0002*carapace_width^3.03/1000, 
                                                   sex == 1 ~ 0.0002*carapace_width^2.94/1000))
 
+
 # function to compute nominal catch, landings, cpue, and lpue per fishing trip 
 compute_cpue.lpue <- function(data) {
   
   # per fishing trip
-  # compute effort (number of pots lifted per trip)
   observer_data_effort <- data |> 
-    dplyr::filter(!is.na(num_pots_sampled)) |>    # ***MANY NA IN POTS SAMPLED in offshore data -> USE FLEETS & RETURNS DATAFOR EFFORT****
+    dplyr::filter(!is.na(num_pots_sampled)) |>   
     dplyr::group_by(date, vesselID, fleet_num) |> 
     dplyr::summarise(nominal.effort = unique(num_pots_sampled, na.rm = TRUE)) 
   
-  # compute total catch (kg) per trip
   observer_data_catch <- data |> 
     dplyr::group_by(date, vesselID, fleet_num) |> 
     dplyr::summarise(nominal.catch = sum(sample_mass_kg, na.rm = TRUE)) 
   
-  # compute total landings (kg) per trip
-     observer_data_landing <- data |> 
-       dplyr::group_by(date, vesselID, fleet_num) |> 
-       dplyr::filter(undersize==0) |>    
-       dplyr::summarise(nominal.landing = sum(sample_mass_kg, na.rm = TRUE))
-  
-  # merge datasets and add vessel info
+ observer_data_landing <- data |> 
+   dplyr::group_by(date, vesselID, fleet_num) |> 
+   dplyr::filter(undersize==0) |>    
+   dplyr::summarise(nominal.landing = sum(sample_mass_kg, na.rm = TRUE))
+ 
   observer_data_trip <- observer_data_catch |> 
     list(observer_data_landing, observer_data_effort) |> 
     purrr::reduce(dplyr::left_join) |>
@@ -99,9 +101,7 @@ compute_cpue.lpue <- function(data) {
                   year = lubridate::year(date))
   observer_data_select_trip <- data |> 
     dplyr::group_by(date, vesselID, fleet_num) |> 
-    dplyr::reframe(# vessel_len=unique(vessel_len), 
-      #nominal.lpue_returns_lobster = mean(nominal.lpue_returns_lobster, na.rm = TRUE),
-      #nominal.lpue_returns_crab = mean(nominal.lpue_returns_crab, na.rm = TRUE),
+    dplyr::reframe(
                   num_pots_per_fleet = unique(num_pots_per_fleet),
                   port = unique(port), 
                   species = unique(species)) 
@@ -109,52 +109,43 @@ compute_cpue.lpue <- function(data) {
     dplyr::left_join(observer_data_select_trip, by = c("date", "vesselID", "fleet_num")) 
   
   # per pot set (w/ unique gps coordinates)
-  # compute total number of pots set in each location in each trip
   observer_data_potset <- data |> 
     dplyr::filter(!is.na(num_pots_sampled)) |>
-    dplyr::group_by(trip, lat_lon) |> 
+    dplyr::group_by(trip, start_lat, start_lon) |> 
     dplyr::summarise(potset = unique(num_pots_sampled))#, na.rm = TRUE)) 
   
-  # compute total catch (kg) per each location in each trip
   observer_data_catch_potset <- data |> 
-    dplyr::group_by(lat_lon, trip) |> 
+    dplyr::group_by(start_lat, start_lon, trip) |> 
     dplyr::summarise(nominal.catch_potset = sum(sample_mass_kg, na.rm = TRUE)) 
   
-  # compute total landings (kg) per each location in each trip
   observer_data_landing_potset <- data |> 
-    dplyr::group_by(lat_lon, trip) |>
+    dplyr::group_by(start_lat, start_lon, trip) |>
     dplyr::filter(undersize==0) |>
     dplyr::summarise(nominal.landing_potset = sum(sample_mass_kg, na.rm = TRUE))
 
-  # merge all datasets
   observer_data_potset <- observer_data_catch_potset |> 
     list(observer_data_landing_potset, observer_data_potset) |> 
     purrr::reduce(dplyr::left_join) |>
     dplyr::mutate(nominal.cpue_potset = nominal.catch_potset/potset 
                   , nominal.lpue_potset = nominal.landing_potset/potset) |>
-    tidyr::separate_wider_delim(cols = lat_lon, delim = "|", names = c("lat", "lon")) |>
     tidyr::separate_wider_delim(cols = trip, delim = "|", names = c("vesselID", "date")) |>
     dplyr::mutate(date = as.Date(date)) |>
-    dplyr::mutate(lat = as.numeric(lat), 
-                  lon = as.numeric(lon), 
+    dplyr::mutate(lat = as.numeric(start_lat), 
+                  lon = as.numeric(start_lon), 
                   month = lubridate::month(date), 
                   quarter = lubridate::quarter(date), 
-                  year = lubridate::year(date))
+                  year = lubridate::year(date)) 
   
-  # add covariate info
   observer_data_select_potset <- data |> 
     dplyr::group_by(vesselID, date, start_lat, start_lon) |> 
     dplyr::reframe(#vessel_len=unique(vessel_len), 
-                  port = unique(port), #ices_sub_rect=unique(ices_sub_rect), 
+                  port = unique(port), 
                   species = unique(species), 
                   num_pots_per_fleet = unique(num_pots_per_fleet),
-                  num_pots_per_fleet = unique(pot_type), 
-                  #nominal.lpue_returns_lobster = unique(nominal.lpue_returns_lobster),
-                  #nominal.lpue_returns_crab = unique(nominal.lpue_returns_crab),
+                  pot_type = unique(pot_type), 
                   lat = unique(start_lat), 
                   lon = unique(start_lon), 
                   vesselID = unique(as.character(vesselID)),
-                   #lowest_tide=unique(lowest_tide), 
                   temp = mean(temperature, na.rm = TRUE), 
                   temp_interpol_dist = mean(temperature_interpolation_dist, na.rm = TRUE), 
                   dist_shore = mean(Distance_to_shore, na.rm = TRUE), 
@@ -162,19 +153,23 @@ compute_cpue.lpue <- function(data) {
                   depth_interpol_dist = mean(Depth_interpolation_distance, na.rm = TRUE), 
                   folk_16 = unique(folk_16), 
                   folk_7 = unique(folk_7)
-                   )
+                   ) |>
+    dplyr::select(-start_lat, -start_lon)
   observer_data_potset <- observer_data_potset |> 
+    dplyr::ungroup() |>
+    dplyr::select(-start_lat, -start_lon) |>
     dplyr::left_join(observer_data_select_potset, by = c("vesselID", "date", "lat", "lon")) 
   
   return(list(observer_data_trip, observer_data_potset))
 }
 
 # apply the function to each stock
-observer_data_fleet_lobster_out <- compute_cpue.lpue(observer_data_fleet_lobster) # lobster
-observer_data_offshore_lobster_out <- compute_cpue.lpue(observer_data_offshore_lobster) # lobster
+observer_data_fleet_lobster_out <- compute_cpue.lpue(observer_data_fleet_lobster)
+observer_data_fleet_crab_out <- compute_cpue.lpue(observer_data_fleet_crab) 
+observer_data_offshore_lobster_out <- compute_cpue.lpue(observer_data_offshore_lobster) 
+observer_data_offshore_crab_out <- compute_cpue.lpue(observer_data_offshore_crab)
 
 # REPLACE landings and LPUE before OCTOER 2017 (IMPLEMENTAITON OF BANNING OF SUBLEGAL SIZED ANIMALS)
-# *** UNDERSIZED ANIMALS ARE RELEASED AFTER October 2017
 replace_landing <- function(data) {
   data[[1]][data[[1]]$year < 2017, ] <- data[[1]] |>
   dplyr::filter(year < 2017) |>
@@ -194,15 +189,10 @@ replace_landing <- function(data) {
                    nominal.lpue_potset = nominal.cpue_potset)
   return(list(data[[1]], data[[2]]))
 }
-
 observer_data_fleet_lobster_out <- replace_landing(observer_data_fleet_lobster_out)
+observer_data_fleet_crab_out <- replace_landing(observer_data_fleet_crab_out)
 observer_data_offshore_lobster_out <- replace_landing(observer_data_offshore_lobster_out)
-
-# # returns data per month, observer data per fishing trip
-# observer_data_fleet_lobster_out[[1]] <- observer_data_fleet_lobster_out[[1]] |> 
-#   dplyr::right_join(returns_data, by = c("vesselID" = "vessel_id", "year", "month", "qrt.yr", "month.yr" = "mon_year"))
-# observer_data_offshore <- observer_data_offshore |> 
-#   dplyr::right_join(returns_data, by = c("vesselID" = "vessel_id", "year", "month", "qrt.yr", "month.yr" = "mon_year"))
+observer_data_offshore_crab_out <- replace_landing(observer_data_offshore_crab_out)
 
 returns_data_compact <- returns_data |>
   dplyr::group_by(vessel_id, year, month, sector, landing_port) |>
@@ -226,17 +216,22 @@ returns_data_compact <- returns_data |>
 
 # export output as rds (as a list)
 readr::write_rds(observer_data_fleet_lobster_out, file = "processed_data/nifca/observer_data_fleet_lobster_nominal.cpue.rds") # lobster
+readr::write_rds(observer_data_fleet_crab_out, file = "processed_data/nifca/observer_data_fleet_crab_nominal.cpue.rds") # crab
 readr::write_rds(observer_data_offshore_lobster_out, file = "processed_data/nifca/observer_data_offshore_lobster_nominal.cpue.rds") # lobster
+readr::write_rds(observer_data_offshore_crab_out, file = "processed_data/nifca/observer_data_offshore_crab_nominal.cpue.rds") # crab
 
 # export output as csv
 readr::write_csv(observer_data_fleet_lobster_out[[1]], file = "processed_data/nifca/observer_data_fleet_lobster_nominal.cpue_trip.csv") 
+readr::write_csv(observer_data_fleet_crab_out[[1]], file = "processed_data/nifca/observer_data_fleet_crab_nominal.cpue_trip.csv")
 readr::write_csv(observer_data_fleet_lobster_out[[2]], file = "processed_data/nifca/observer_data_fleet_lobster_nominal.cpue_potset.csv") 
+readr::write_csv(observer_data_fleet_crab_out[[2]], file = "processed_data/nifca/observer_data_fleet_crab_nominal.cpue_potset.csv")
 
 readr::write_csv(observer_data_offshore_lobster_out[[1]], file = "processed_data/nifca/observer_data_offshore_lobster_nominal.cpue_trip.csv") 
+readr::write_csv(observer_data_offshore_crab_out[[1]], file = "processed_data/nifca/observer_data_offshore_crab_nominal.cpue_trip.csv")
 readr::write_csv(observer_data_offshore_lobster_out[[2]], file = "processed_data/nifca/observer_data_offshore_lobster_nominal.cpue_potset.csv") 
+readr::write_csv(observer_data_offshore_crab_out[[2]], file = "processed_data/nifca/observer_data_offshore_crab_nominal.cpue_potset.csv")
 
 readr::write_csv(returns_data_compact, file = "processed_data/nifca/returns_data_compact.csv")
-
 
 # plot output
 # temporal variation
@@ -244,7 +239,6 @@ readr::write_csv(returns_data_compact, file = "processed_data/nifca/returns_data
 data <- observer_data_fleet_lobster_out[[1]]
 response <- data$nominal.cpue
 response.name <- "nominal catch rate (kg per number of pots hauled)"
-
 mycolors <- c(RColorBrewer::brewer.pal(name = "Paired", n = 12), 
               RColorBrewer::brewer.pal(name = "Set3", n = 7))
 (plot1 <- data |> ggplot2::ggplot(ggplot2::aes(lubridate::quarter(date, with_year = TRUE), response, 
@@ -278,39 +272,28 @@ mycolors <- c(RColorBrewer::brewer.pal(name = "Paired", n = 12),
   ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(size = 3))))
 
 # export plot
-ggplot2::ggsave(file=paste0("plots/nifca/", response.name, "_observer_trends_nifca.svg"), plot=plot1, width=12, height=8)
-
 # spatial distribution
 # select a dataset and a parameter
 data <- observer_data_offshore_lobster_out[[2]]
 response <- data$nominal.cpue_potset
 response.name <- "nominal cpue (kg per number of pots hauled)"
-
 world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
-#eez <- sf::read_sf(dsn = "data/shapefiles/World_EEZ_v12_20231025/eez_v12.shp", stringsAsFactors = FALSE)
-#eez_uk <- eez |> dplyr::filter()
-
 xlim <- c(min(data$lon, na.rm = TRUE)*2.7, 
           max(data$lon, na.rm = TRUE)*-0.3)
 ylim <- c(min(data$lat, na.rm = TRUE)*0.97, 
           max(data$lat, na.rm = TRUE)*1.02)
-# icea rectangles
 shp_ices.rec <- sf::read_sf(dsn = "data/ICES_Rect/ICES_Statistical_Rectangles_Eco.shp", stringsAsFactors = FALSE)
 
 # read in ICES rectangles for wales
-# subset nifca landings
 ices_rec <- readr::read_delim(file = "data/nifca/ices_rectangles_england.csv") |> 
   dplyr::filter(proportion != 0)
 nifca_rec <- c("39E8", "39E9", "40E8", "40E9", "41E8", "39E0",  "41E7") 
 ices_rec_nifca <- ices_rec |> 
   dplyr::filter(`ICES Rectangle` %in% nifca_rec)
-
-# subset nifca
 shp_ices.rec_nifca <- shp_ices.rec |> 
   dplyr::right_join(ices_rec_nifca, by = c("ICESNAME"="ICES Rectangle")) |>
   dplyr::mutate(PERCENTAGE = PERCENTAGE*proportion)
-
-(plot2 <- ggplot2::ggplot(data = world) +  
+ggplot2::ggplot(data = world) +  
   ggplot2::scale_color_manual(values = mycolors) +
   ggplot2::geom_sf(data = shp_ices.rec_nifca, fill = NA, colour = "darkblue") +
   ggplot2::geom_sf() +
@@ -338,12 +321,7 @@ shp_ices.rec_nifca <- shp_ices.rec |>
     strip.text.x = ggplot2::element_text(size = 10, colour = "darkblue")) +  
   ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(size = 3)))  +
   ggplot2::guides(fill=ggplot2::guide_legend(title="Month")) +
-  ggplot2::facet_wrap(~ year, strip.position = "top", ncol = 3))
-
-# export plot
-ggplot2::ggsave(file=paste0("plots/nifca/", response.name, "_observer_space_nifca.svg"), 
-                plot=plot2, width=12, height=8)
-
+  ggplot2::facet_wrap(~ year, strip.position = "top", ncol = 3)
 
 # size structure
 # select a dataset
@@ -353,7 +331,6 @@ observer_data_crabb_no.na <- observer_data_offshore_crab |>
   dplyr::filter(!is.na(sex))
 sex.label <- c("male", "female")
 names(sex.label) <- c(0, 1)
-
 ggplot2::ggplot(nominal.cpue_potset_no.na, 
                 ggplot2::aes(x = carapace_width, 
                              y = as.factor(year))) +
@@ -389,7 +366,4 @@ ggplot2::ggplot(nominal.cpue_potset_no.na,
   ggplot2::facet_wrap(~ sex, 
                       labeller = ggplot2::labeller(sex = sex.label), 
                       strip.position = "top", 
-                      ncol = 3) 
-
-# export plot
-ggplot2::ggsave(file=paste0("plots/nifca/size.comp_observer_nifca.svg"), plot=plot3, width=12, height=8)
+                      ncol = 3)

@@ -27,6 +27,7 @@ colnames(observer_data) <- c("date", "year", "month", "survey_type", "port", "ve
                              "depth_m", "soak_time", "num_lobsters_measured", "num_crabs_measured", "bycatch_species",
                              "surveyor", "comments_master") 
 
+
 # data cleaning
 observer_data <- observer_data |> 
   dplyr::mutate(month = dplyr::recode(month, April=4, August=8, December=12, February=2, January=1, 
