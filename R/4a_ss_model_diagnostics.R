@@ -1,4 +1,4 @@
-# script to perform disgnostics for Stock Synthesis models
+# script to perform dagnostics for Stock Synthesis models
 
 # set the directory for the ss files
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
