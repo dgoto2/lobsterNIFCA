@@ -1,4 +1,4 @@
-### Northumberland lobster stock assessment
+### Northumberland (England) lobster stock assessment
 This repository contains code used for the 2023 stock assessment work (data processing and assessment model fitting using Stock Synthesis, SS3) for the Northumberland stock of European lobster (Homarus gammarus).
 
 #### File list
